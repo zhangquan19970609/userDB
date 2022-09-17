@@ -105,3 +105,31 @@ mongoose encryption 的原理：
 新注册一个后，在 Robo 3T 中可以看到！
 并且也可以登录（本 level 是以加密形式传送密码，不会在 后台直接看到）
 
+缺点：当 key variable 被看到，或者后台选择打印 doc.password 时，仍然会暴露密码。
+
+///////////////////////////////////////////////////
+///////////////// Git hub 加密教学！/////////////////
+///////////////////////////////////////////////////
+
+
+新任务：创造一个 新的 git 寄存，从 local 寄存到 github！
+
+首先，建立一个 .gitignore 文件，指明 Authentication 笔记 和 node_module 不上传！
+
+第二步，建立一个 git 本地寄存
+
+$ git add .
+$ git commit -m 
+    "Level 1 & Level 2: from plain text to mongoose encryption"
+
+此时已经可以使用 $ git log 来查看版本，标题就是 commit 时写下的评论！
+
+第三步，将本地寄存 push 到 github！
+    在 github 建立一个 repository, 将 URL 复制下来，
+    然后连接并发送 本地 git 到 remote 端：
+$ git remote add origin https://github.com/zhangquan19970609/userDB.git
+$ git push -u origin master
+
+    对于多添加的内容，可以用 rm 方法来移除。
+
+
