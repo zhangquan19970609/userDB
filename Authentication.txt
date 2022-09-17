@@ -1,0 +1,107 @@
+将安全验证级别分为：6级，
+并建立一个 "Secrets Wall" app，拥有如下页面：
+Home --> Register / Login --> Secrets 四个页面。
+    可以从 register 或 login 任一 route 进入 secrets 页面！
+
+Set up：
+
+$ npm init -y
+$ npm install
+$ npm i express body-parser ejs lodash mongoose nodemon
+
+添加三个 app.get("/"):
+res.render("XXX")
+
+Level 1: 通过 MongoDB 存储 Email & passwords, 登录时验证。
+
+    第一步：设置一个 MongoDB 数据库，包括以下步骤：
+        connect, Schema, model.
+            mongoose.connect("mongodb://localhost:27017/userDB", {useNewUrlParser: true});
+            const usersSchema = new mongoose.Schema({
+                email: String,
+                password: String});
+            const User = new mongoose.model("User", usersSchema);
+
+    第二步：建立一个 app.post("/register") 来接收 register 端上传的账号密码，并保存！
+        const newUser = User.new({
+                email: req.body.username,
+                password: req.body.password});             
+        newUser.save();
+
+        可以在 .save 中创建一个 callback,如果保存成功则回传提示！
+        newUser.save(function(err){
+            if(!err){console.log("Registration Successful!");} 
+            else {console.log(err);}
+        });
+
+注意：该步骤结束后，
+    可以 res.redirect 回到 "/", 
+    或者 res.render 前往 "secrets". 
+    (之所以使用 res.render 是因为没有 app.get("/secrets"))
+
+未对 "/secrets" 设置 app.get("/secrets")，
+是因为私密页面不应通过 URL 直接访问！
+    此时通过 Robo 3T 可以阅读到 mongodb 中 userDB 的内容！
+
+    第三步：建立一个 app.post("/login")，通过 login route 进入 "/secrets"
+        想法：
+        对已经建立的newUser 的 email 进行 findOne 操作，
+        如果成功 found 且 password 相等，则允许登录进入 "/secrets"。
+
+        User.findOne({ email: typedEmail }, function(err, doc){
+            if (doc) {
+                if (typedPassword === doc.password) {
+                    res.render("secrets");
+                } else {
+                    res.send("Invalid Password. Please Try Again");
+                }
+            } else {
+                res.send("Invalid Email. Please Try Again.");
+            }
+        });
+
+        测试后发现成功！
+
+此刻所有的 username + password 都以明文方式储存在服务器，insecure. 下一课学习加密.
+
+Level 2: 将数据库加密处理。
+
+数据库的加密，是将原信息，以特定的 key 处理为另一段信息。
+npm 中的一种 package: mongoose-encryption, 可以在 app.js 中处理 mongoose 建立的DB，
+达成对数据库加密这个目标。
+
+本 level 先讨论 encryption, authentication 也是目标之一，但稍后进行。
+
+    首先安装：
+    $ npm i mongoose-encryption
+
+    并在 app.js 中启用这个 module:
+    const encrypt = require('mongoose-encryption');
+
+    规定一个特殊的 key，准备供 encrypt 模块 plugin 时使用 
+    注：这个 encrypt 模块，作用于 mongoose schema，
+    const key = "04818passwordEncrypted";
+
+    并对 Usersschema 设置一个 encrypt plugin，内容为这个 key:
+    usersSchema.plugin(encrypt,{secret: key});
+
+经过 login 试验后发现，会报错：invalid email！
+是否因为 email 也被加密了，findOne 无法用加密后的值在 userDB 中寻找匹配？
+
+    利用 encryptedFields 或 excludeFromEncryption, 来规定哪些 field 要加密、哪些不用加密。
+    usersSchema.plugin(encrypt, { 
+        secret: key, 
+        encryptedFields: ['password'] 
+    });
+
+再次试验后仍然是 invalid email，（但把 email 剔除出 encrypt 是正确的！）
+这是因为没有新 register 并 save 一个 新 user，
+因此没有可供 cipher 或 decipher 的 _ct 和 _ac
+
+mongoose encryption 的原理：
+在 register 创立新的 user 并 save 时，会对输入的密码进行加密，存储在 _ct
+在 login 时，取出 _ct 并进行 解密，并用 _ac 核对签名。
+
+新注册一个后，在 Robo 3T 中可以看到！
+并且也可以登录（本 level 是以加密形式传送密码，不会在 后台直接看到）
+
