@@ -1,13 +1,14 @@
 //jshint esversion:6
 
-require('dotenv').config();
+// require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 var _ = require('lodash');
 
 const mongoose = require('mongoose');
-const encrypt = require('mongoose-encryption');
+// const encrypt = require('mongoose-encryption');
+const md5 = require('md5');
 
 const app = express();
 
@@ -23,10 +24,10 @@ const usersSchema = new mongoose.Schema({
 });
 
 // console.log(process.env.ROGUEKEY);
-usersSchema.plugin(encrypt, { 
-    secret: process.env.KEY, 
-    encryptedFields: ['password'] 
-});
+// usersSchema.plugin(encrypt, { 
+//     secret: process.env.KEY, 
+//     encryptedFields: ['password'] 
+// });
   
 const User = new mongoose.model("User", usersSchema);
 
@@ -46,7 +47,7 @@ app.post("/register", function(req,res){
     
     const newUser = new User({
         email: req.body.username,
-        password: req.body.password
+        password: md5(req.body.password)
     });
 
     newUser.save(function(err){
@@ -57,11 +58,14 @@ app.post("/register", function(req,res){
             console.log(err);
         }
     });
+
+    console.log("The Hashed password of this user is:");
+    console.log(newUser.password);
 });
 
 app.post("/login", function(req,res){
     const typedEmail = req.body.username;
-    const typedPassword = req.body.password;
+    const typedPassword = md5(req.body.password);
 
     User.findOne({ email: typedEmail }, function(err, doc){
         if (doc) {
