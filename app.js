@@ -1,14 +1,13 @@
 //jshint esversion:6
 
-// require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 var _ = require('lodash');
 
 const mongoose = require('mongoose');
-// const encrypt = require('mongoose-encryption');
-const md5 = require('md5');
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 const app = express();
 
@@ -22,12 +21,6 @@ const usersSchema = new mongoose.Schema({
     email: String,
     password: String
 });
-
-// console.log(process.env.ROGUEKEY);
-// usersSchema.plugin(encrypt, { 
-//     secret: process.env.KEY, 
-//     encryptedFields: ['password'] 
-// });
   
 const User = new mongoose.model("User", usersSchema);
 
@@ -44,36 +37,40 @@ app.get("/register",function(req,res){
 });
 
 app.post("/register", function(req,res){
-    
-    const newUser = new User({
-        email: req.body.username,
-        password: md5(req.body.password)
-    });
+    const typedInEmail = req.body.username;
+    const typedInPassword = req.body.password;
 
-    newUser.save(function(err){
-        if(!err){
-            console.log("Registration Successful!");
-            res.render("secrets");
-        } else {
-            console.log(err);
-        }
-    });
+    bcrypt.hash(typedInPassword, saltRounds, function(err, hash) {
+        const newUser = new User({
+            email: typedInEmail,
+            password: hash
+        });
 
-    console.log("The Hashed password of this user is:");
-    console.log(newUser.password);
+        newUser.save(function(err){
+            if(!err){
+                console.log("Registration Successful!");
+                res.render("secrets");
+            } else {
+                console.log(err);
+            }
+        });
+    });
 });
 
 app.post("/login", function(req,res){
-    const typedEmail = req.body.username;
-    const typedPassword = md5(req.body.password);
+    const logInEmail = req.body.username;
+    const logInPassword = req.body.password;
 
-    User.findOne({ email: typedEmail }, function(err, doc){
+    User.findOne({ email: logInEmail }, function(err, doc){
         if (doc) {
-            if (typedPassword === doc.password) {
-                res.render("secrets");
-            } else {
-                res.send("Invalid Password. Please Try Again");
-            }
+            const hash = doc.password;
+            bcrypt.compare(logInPassword, hash, function(err, result) {
+                if (result === true) {
+                    res.render("secrets");
+                } else {
+                    res.send("Invalid Password. Please Try Again");
+                }
+            });
         } else {
             res.send("Invalid Email. Please Try Again.");
         }
