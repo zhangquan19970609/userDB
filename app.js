@@ -1,9 +1,12 @@
 //jshint esversion:6
+require('dotenv').config();
+
 
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const _ = require('lodash');
+
 
 const mongoose = require('mongoose');
 // const bcrypt = require('bcrypt');
@@ -12,6 +15,9 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const passport = require('passport');
 const passportLocalMongoose = require('passport-local-mongoose');
+const GoogleStrategy = require('passport-google-oauth20').Strategy; 
+const findOrCreate = require('mongoose-findorcreate');
+const FacebookStrategy = require('passport-facebook');
 
 const app = express();
 
@@ -34,22 +40,86 @@ mongoose.connect("mongodb://localhost:27017/userDB", {useNewUrlParser: true});
 
 const usersSchema = new mongoose.Schema({
     email: String,
-    password: String
+    password: String,
+    googleId: String,
+    facebookId: String,
+    secret: String
 });
 
 usersSchema.plugin(passportLocalMongoose);
+usersSchema.plugin(findOrCreate);
 // 使用 schema 名称
 
 const User = new mongoose.model("User", usersSchema);
 
 passport.use(User.createStrategy());
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+
+passport.serializeUser(function(user, done) {
+    done(null, user.id);
+  });
+  
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets",
+    // 添加 userProfileURL 后，就不再从已经停止维护的 Google+ 取信息，而是从 Google 的 userinfo
+    userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
+  },
+  // 以下 function 的功能：接收 Google send 来的“工作证” accessToken，
+  // 并 findOrCreate 一个 user，ID 为 Google 发送到 本地的 profile.id
+  function(accessToken, refreshToken, profile, cb) {
+    console.log(profile);
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
+
+passport.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_APP_ID,
+    clientSecret: process.env.FACEBOOK_APP_SECRET,
+    callbackURL: "http://localhost:3000/auth/facebook/secrets",
+    profileFields: ['id', 'displayName', 'photos', 'email']
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    console.log(profile);
+    User.findOrCreate({ facebookId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
+
 // 使用 Model 名称
 
 app.get("/",function(req,res){
     res.render("home");
 });
+
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ["profile"] }));
+
+app.get('/auth/google/secrets', 
+passport.authenticate('google', { failureRedirect: '/login' }),
+function(req, res) {
+  // Successful authentication, redirect home.
+  res.redirect('/secrets');
+});
+
+app.get('/auth/facebook',
+  passport.authenticate('facebook'));
+
+app.get('/auth/facebook/secrets',
+  passport.authenticate('facebook', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect('/secrets');
+  });
 
 app.get("/login",function(req,res){
     res.render("login");
@@ -68,8 +138,18 @@ app.get("/register",function(req,res){
     // 但如果关闭浏览器（清空了设置的缓存）或在 nodemon 中重启了 app.js，
     // 再前往 /secrets 就会被重新定向到 login！
 app.get("/secrets",function(req,res){
+    User.find({ secret: { $ne: null } }, function(err, foundDocs){
+        if (!err){
+            res.render("secrets", {usersWithSecrets: foundDocs});
+        } else {
+            console.log(err);
+        }
+    });
+});
+
+app.get("/submit",function(req,res){
     if (req.isAuthenticated()){
-        res.render("secrets");
+        res.render("submit");
     } else {
         res.redirect("/login");
     }
@@ -172,6 +252,25 @@ app.post("/login", function(req,res){
         // 如果 req.isAuthenticated() 结果为 true,
         // 则 render 到 /secrets，如果不是，则 redirect 到 /login 重新输入。
     
+});
+
+app.post("/submit",function(req,res){
+    // 因为 input name 是 secret
+    const submittedSecret = req.body.secret;
+
+    // console.log(req.user.id); 
+    
+    User.findById(req.user.id, function(err,foundUser){
+        if (!err) {
+            foundUser.secret = submittedSecret;
+            foundUser.save(function(){
+                res.redirect("/secrets");
+            });
+        } else {
+            console.log(err);
+        }
+    });
+
 });
 
 app.listen(3000, function() {
